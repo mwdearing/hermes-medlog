@@ -6,6 +6,8 @@ A deterministic medication log for your own use, packaged as a [Hermes Agent](ht
 
 Part of a small set that work together: [HealthRelay](https://github.com/mwdearing/health-relay) (app + receiver), [hermes-healthrelay](https://github.com/mwdearing/hermes-healthrelay) (read-only access for your agent), [hermes-health-insights](https://github.com/mwdearing/hermes-health-insights) (analysis; its optional `medication_adherence` module reads `medlog --json missing`) and this one.
 
+Setting up the whole chain (app and receiver, hermes-healthrelay, hermes-health-insights, this plugin)? Follow the [Full setup guide](https://github.com/mwdearing/health-relay/blob/main/docs/full-setup.md): one ordered walkthrough with a check after each step.
+
 ## What it does
 | Command | Purpose |
 | --- | --- |
