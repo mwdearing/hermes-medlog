@@ -1,5 +1,5 @@
 """Weekly report: automatic imports of the last 7 days (from auto-import.log) and doses still not logged. Read-only,
-plain text on stdout. Run as ``python -m medlog.recipes.weekly_report`` (or ``medlog-weekly-report``)."""
+plain text on stdout. Run as ``medlog-weekly-report`` (or ``python -m medlog.recipes.weekly_report`` in a virtualenv that has the package)."""
 from __future__ import annotations
 
 import re

@@ -1,7 +1,7 @@
 """Daily check-in: list dose slots with no record. Read-only, plain text on stdout.
 
 Prints NOTHING when no medication is registered or nothing is missing, so a scheduler delivers nothing on a quiet
-day. Never writes a record and gives no advice. Run it as ``python -m medlog.recipes.checkin`` (or ``medlog-checkin``).
+day. Never writes a record and gives no advice. Run it as ``medlog-checkin`` (or ``python -m medlog.recipes.checkin`` in a virtualenv that has the package).
 Env: MEDLOG_CHECKIN_DAYS (default 3) and the usual MEDLOG_* settings.
 """
 from __future__ import annotations
