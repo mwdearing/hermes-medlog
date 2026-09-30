@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medlog"
+dynamic = ["version"]
+description = "Deterministic medication log: record what you took, find what is missing, import dose events from a HealthRelay receiver. No dosing advice."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+medlog = "medlog.cli:main"
+medlog-checkin = "medlog.recipes.checkin:main"
+medlog-weekly-report = "medlog.recipes.weekly_report:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "medlog.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["medlog", "medlog.*"]
