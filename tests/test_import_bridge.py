@@ -138,7 +138,10 @@ class BridgeTest(unittest.TestCase):
 
     def test_missing_table_is_not_an_error_and_leaves_no_cursor(self):
         other = str(Path(self.tmp.name) / "old.sqlite")
-        sqlite3.connect(other).close()
+        old = sqlite3.connect(other)  # an older receiver: a real database that lacks the dose-event table
+        old.execute("CREATE TABLE samples (x TEXT)")
+        old.commit()
+        old.close()
         code, out, _ = self.cli("import-bridge", "--db", other, "--apply")
         self.assertEqual(code, 0)
         self.assertIn("events=0", out)

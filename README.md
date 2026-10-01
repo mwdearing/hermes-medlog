@@ -16,7 +16,7 @@ Setting up the whole chain (app and receiver, hermes-healthrelay, hermes-health-
 | `medlog missing / status / untimed` | Expected slots with no record; today's view; doses recorded without a time |
 | `medlog void <id> --reason ...` | Correct a mistake (nothing is ever deleted or edited) |
 | `medlog show --days N --format text\|json\|csv` | Your history, for you or your clinician |
-| `medlog import-bridge --db <receiver.sqlite>` | Import dose events from a HealthRelay receiver (read-only on the database; preview first) |
+| `medlog import-bridge` | Import dose events from a HealthRelay receiver (read-only on the database; preview first) |
 | `medlog import-apple FILE` | Import an Apple Health medication export file |
 | `medlog unmapped / map-apple / check-med` | Register a new medication end to end |
 
@@ -45,10 +45,14 @@ Each setting resolves as: environment variable, then the JSON config file, then 
 | --- | --- | --- | --- |
 | Data folder | `MEDLOG_HOME` | `data_dir` | `$XDG_DATA_HOME/medlog`, else `~/.local/share/medlog` |
 | Time zone | `MEDLOG_TZ` | `timezone` | the system zone |
+| Receiver database | `MEDLOG_BRIDGE_DB` | `bridge_db` | none (`--db` overrides) |
 | Apple name map | `MEDLOG_APPLE_MAP` | `apple_map` | `<data folder>/apple_med_map.json` |
 
 ## HealthRelay
-Point `import-bridge` at the receiver's SQLite database (`--db`). It opens the file read-only, previews by default (`--apply` writes, `--auto` is the unattended mode with safety holds), and remembers a cursor that only moves forward after a successful apply. See the `medlog-healthrelay-import` skill; an optional systemd path unit can run it after every sync.
+Set `bridge_db` (config file) or `MEDLOG_BRIDGE_DB` to the receiver's SQLite database; `--db` overrides it for one run. It opens the file read-only, previews by default (`--apply` writes, `--auto` is the unattended mode with safety holds), and remembers a cursor that only moves forward after a successful apply. See the `medlog-healthrelay-import` skill; an optional systemd path unit can run it after every sync.
+
+## Troubleshooting
+Run `medlog doctor` first. It prints the config file used, the data folder, the receiver database (found, not empty, opens read-only, has the dose-event table, days since it changed), the last import and the number of unmapped medication names; `--json` for machines. Exit codes: 0 ok, 1 warning (database not configured, stale or unmapped names), 2 error (configured database missing, empty or unreadable). An error is never "nothing to import": fix the path in `bridge_db` instead of looking for another database.
 
 ## Scheduled reports
 Two read-only, plain-text recipes for Hermes cron: `medlog-checkin` (silent unless something is missing) and `medlog-weekly-report`. The plugin ships no job; the skills walk you through creating one, testing it with local delivery first, and choosing a private channel.

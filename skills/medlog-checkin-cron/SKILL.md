@@ -9,6 +9,8 @@ compatibility: Hermes Agent cron; the medlog CLI.
 
 Informational only, not medical advice. This tool never infers a dose, time, status or schedule, and it gives no dosing, interaction or schedule advice. Ask the user for every value. Questions about doses, missed doses, side effects or interactions go to their prescriber or pharmacist.
 
+**First, run `medlog doctor`.** If it exits 2, show its output to the user and stop. Never look for a database or write SQL yourself: the receiver database path is the `bridge_db` setting (config key, or `MEDLOG_BRIDGE_DB`), and `--db` is only an override.
+
 The plugin ships no scheduled job. Propose one; the user approves it.
 
 - Command: `medlog-checkin` (a console script installed with the tool; `python3 -m` will not find it when the tool was installed with pipx, because pipx isolates it). Read-only. It prints ONE plain-text message listing slots with no record (at most 8, grouped by medication, last `MEDLOG_CHECKIN_DAYS` days, default 3) and prints nothing at all when nothing is missing, so a quiet day sends nothing.

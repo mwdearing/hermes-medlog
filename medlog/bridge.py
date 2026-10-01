@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+from . import config
 from .core import MedlogError, data_dir, locked, now, tz
 
 TABLE = "medication_dose_events"
@@ -33,10 +34,25 @@ OPTIONAL = ("medication_concept_key", "status_raw", "scheduled_time", "dose", "u
 STATE_NAME = "bridge-state.json"
 
 
+def resolve_db(db: str | None) -> str:
+    """The --db override, else the `bridge_db` setting; an error that says where to set it when neither exists."""
+    if db:
+        return db
+    try:
+        configured = config.bridge_db_setting()
+    except config.ConfigError as exc:
+        raise MedlogError(str(exc)) from exc
+    if not configured:
+        raise MedlogError(f"no receiver database: pass --db or set 'bridge_db' in {config.config_path()} (or MEDLOG_BRIDGE_DB)")
+    return configured
+
+
 def open_readonly(db: str) -> sqlite3.Connection:
     path = os.path.abspath(os.path.expanduser(db))
     if not os.path.isfile(path):
         raise MedlogError(f"receiver database not found: {db}")
+    if os.path.getsize(path) == 0:
+        raise MedlogError(f"receiver database is a 0-byte file, not a database: {db}")
     uri = "file:" + urllib.parse.quote(path) + "?mode=ro"
     try:
         return sqlite3.connect(uri, uri=True, timeout=10)
@@ -121,7 +137,7 @@ def cmd_import_bridge(args) -> int:
     if since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
         raise MedlogError(f"bad --since {since!r}, use YYYY-MM-DD")
     cursor = None if since else load_cursor()
-    records, newest = fetch_records(args.db, cursor=cursor, since=since)
+    records, newest = fetch_records(resolve_db(args.db), cursor=cursor, since=since)
     print(f"import-bridge: events={len(records)} since={since or cursor or 'none'}")
     if not records:
         return 0

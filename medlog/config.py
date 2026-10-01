@@ -5,7 +5,7 @@ The config file is JSON: ``$MEDLOG_CONFIG``, else ``$XDG_CONFIG_HOME/medlog/conf
 ``~/.config/medlog/config.json``. A missing file is fine; an unreadable or invalid one is an error, so a typo
 can never silently send records to a different data directory.
 
-Keys: data_dir, timezone, extensions, v1_path, medlog_bin, notify_command, apple_map.
+Keys: data_dir, timezone, extensions, v1_path, medlog_bin, notify_command, apple_map, bridge_db.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-KEYS = {"data_dir", "timezone", "extensions", "v1_path", "medlog_bin", "notify_command", "apple_map"}
+KEYS = {"data_dir", "timezone", "extensions", "v1_path", "medlog_bin", "notify_command", "apple_map", "bridge_db"}
 
 _warned = False
 
@@ -92,6 +92,12 @@ def timezone_name() -> str:
 
 def data_dir_setting() -> str:
     return str(get("data_dir", "MEDLOG_HOME") or default_data_dir())
+
+
+def bridge_db_setting() -> str | None:
+    """Path of the HealthRelay receiver database: MEDLOG_BRIDGE_DB, else `bridge_db` in the config file, else None."""
+    value = get("bridge_db", "MEDLOG_BRIDGE_DB")
+    return str(value) if value else None
 
 
 def extensions() -> list[str]:

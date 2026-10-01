@@ -9,6 +9,8 @@ compatibility: The medlog CLI.
 
 Informational only, not medical advice. This tool never infers a dose, time, status or schedule, and it gives no dosing, interaction or schedule advice. Ask the user for every value. Questions about doses, missed doses, side effects or interactions go to their prescriber or pharmacist.
 
+**First, run `medlog doctor`.** If it exits 2, show its output to the user and stop. Never look for a database or write SQL yourself: the receiver database path is the `bridge_db` setting (config key, or `MEDLOG_BRIDGE_DB`), and `--db` is only an override.
+
 Rules
 1. **Record only what the user said.** Status, time and dose come from their words. Never guess a time; never fill in a dose they did not state (a registered default dose is used only when they say they took "it"). No time given: log without one (`time_source` is then `unspecified`).
 2. **One record per slot.** A duplicate is refused. Use `--force` only if the user confirms it really was a second dose, and then with `--status extra`.

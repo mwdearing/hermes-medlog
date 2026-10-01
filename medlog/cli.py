@@ -12,7 +12,8 @@ Commands:
   log ID [--status taken|skipped|missed|extra] [--time HH:MM | --at ISO] [--date D]
          [--slot S] [--dose D --unit U] [--note T] [--source S] [--force] [--dry-run]
   import-apple FILE [--apply | --auto]
-  import-bridge --db PATH [--since DATE] [--apply | --auto]   (HealthRelay receiver database, read-only)
+  import-bridge [--db PATH] [--since DATE] [--apply | --auto]   (HealthRelay receiver database, read-only)
+  doctor                                                       (setup check; exit 0 ok, 1 warning, 2 error)
   unmapped [--days N] | map-apple KEY ID [--replace] | check-med ID     (registering a new medication)
   void EVENT_ID --reason T
   show [--med ID] [--days N] [--format text|json|csv]
@@ -103,13 +104,13 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("file"); imp.add_argument("--apply", action="store_true")
     imp.add_argument("--auto", action="store_true", help="apply by itself only when clean (no dose mismatch) and small; else dry run")
     ib = sub.add_parser("import-bridge", help="import medication dose events from a HealthRelay receiver database (read-only)")
-    ib.add_argument("--db", required=True, help="path to the receiver SQLite database")
+    ib.add_argument("--db", help="path to the receiver SQLite database (default: the bridge_db setting)")
     ib.add_argument("--since", help="re-read events that started on/after YYYY-MM-DD (backfill; ignores the cursor)")
     ib.add_argument("--apply", action="store_true", help="write the records (default is a dry-run preview)")
     ib.add_argument("--auto", action="store_true", help="unattended: apply only when clean and small, else dry run")
     um = sub.add_parser("unmapped", help="Apple names/concept ids in recent exports that map to nothing (read-only)")
     um.add_argument("--days", type=int, default=14)
-    um.add_argument("--db", help="read the receiver database instead of the export files")
+    um.add_argument("--db", help="receiver database to read (default: the bridge_db setting, else the export files)")
     ma = sub.add_parser("map-apple", help="map an Apple display name or 'concept <id>' to a registry id")
     ma.add_argument("key"); ma.add_argument("id"); ma.add_argument("--replace", action="store_true")
     cm = sub.add_parser("check-med", help="is a registered medication set up end to end? (read-only; exit 2 if not)")
@@ -119,6 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     sh.add_argument("--format", choices=["text", "json", "csv"], default="text")
     m = sub.add_parser("missing"); m.add_argument("--med"); m.add_argument("--days", type=int, default=7)
     sub.add_parser("status")
+    sub.add_parser("doctor", help="check the setup: config, data dir, bridge database, last import, unmapped (exit 0 ok, 1 warning, 2 error)")
     u = sub.add_parser("untimed"); u.add_argument("--days", type=int, default=30); u.add_argument("--med")
     return p
 
@@ -140,6 +142,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "import-bridge":
             from .bridge import cmd_import_bridge  # lazy
             return cmd_import_bridge(args)
+        elif args.cmd == "doctor":
+            from .doctor import cmd_doctor  # lazy
+            return cmd_doctor(args)
         elif args.cmd in ("unmapped", "map-apple", "check-med"):
             from . import setup_cmds  # lazy: setup_cmds imports core and apple
             return {"unmapped": setup_cmds.cmd_unmapped, "map-apple": setup_cmds.cmd_map_apple,

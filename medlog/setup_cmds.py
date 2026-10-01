@@ -37,10 +37,15 @@ def _lower_map(raw: dict) -> dict[str, str]:
 
 
 def _sources(args, since: str):
-    """Lists of dose-event records: the receiver database when --db is given, else each retained export file."""
-    if getattr(args, "db", None):
-        from .bridge import fetch_records
-        yield fetch_records(args.db, since=since)[0]
+    """Lists of dose-event records: the receiver database (--db, else the bridge_db setting), else each retained export file."""
+    from . import config
+    from .bridge import fetch_records
+    try:
+        db = getattr(args, "db", None) or config.bridge_db_setting()
+    except config.ConfigError as exc:
+        raise MedlogError(str(exc)) from exc
+    if db:
+        yield fetch_records(db, since=since)[0]
         return
     for path in sorted((data_dir() / "bridge-exports").glob("bridge-meds-*.json")):
         try:
@@ -54,8 +59,7 @@ def _emit(args, result, text: str) -> None:
 
 
 # ---------------------------------------------------------------- unmapped
-def cmd_unmapped(args) -> int:
-    """Names and concept ids in recent bridge exports that reach no registered medication (read-only)."""
+def unmapped_rows(args) -> list[dict]:
     the_map = _lower_map(_raw_map())
     registry = load_registry()["medications"]
     since = (now().date() - timedelta(days=args.days)).isoformat()
@@ -78,7 +82,12 @@ def cmd_unmapped(args) -> int:
                                                         "events": 0, "newest": ""})
             group["events"] += 1
             group["newest"] = max(group["newest"], day)
-    rows = sorted(groups.values(), key=lambda r: (r["name"].lower(), r["concept"]))
+    return sorted(groups.values(), key=lambda r: (r["name"].lower(), r["concept"]))
+
+
+def cmd_unmapped(args) -> int:
+    """Names and concept ids in recent bridge data that reach no registered medication (read-only)."""
+    rows = unmapped_rows(args)
     lines = [f"{r['name'] or '(no name)'} | {r['concept'] or '(no concept id)'} | {r['events']} events, newest {r['newest']}"
              for r in rows]
     _emit(args, rows, "\n".join(lines) if lines else f"nothing unmapped in the last {args.days} days")
