@@ -25,7 +25,7 @@ It refuses future times and dates, unknown medications and duplicate slots (use 
 ## Install
 1. Install the tool and try it on made-up data (nothing real is touched):
    ```bash
-   pipx install git+https://github.com/mwdearing/hermes-medlog
+   pipx install git+https://github.com/mwdearing/hermes-medlog@<sha>   # 40-character sha of the release you want
    export MEDLOG_HOME=$(mktemp -d)
    medlog add-med demo --name "Demo medicine" --dose 10 --unit mg --time 08:00
    medlog log demo --time 08:05

@@ -1,5 +1,5 @@
 """medlog: a deterministic medication log. See medlog.cli for the command line."""
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from . import core as _core  # noqa: E402
 from . import cli as _cli  # noqa: E402
