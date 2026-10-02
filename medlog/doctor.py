@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 from . import config
 from .bridge import TABLE, open_readonly
+from .sqlite_retry import retry_read
 from .core import MedlogError, data_dir, now
 
 STALE_DAYS = 3
@@ -55,13 +56,15 @@ def _check_bridge(report: dict) -> None:
         report["errors"].append(f"{db} is a 0-byte file, not a database")
         return
     try:
-        con = open_readonly(path)
-        try:
-            info["opens_read_only"] = True
-            info["has_dose_event_table"] = bool(con.execute(
-                "select 1 from sqlite_master where type='table' and name=?", (TABLE,)).fetchone())
-        finally:
-            con.close()
+        def probe():
+            con = open_readonly(path)
+            try:
+                return bool(con.execute(
+                    "select 1 from sqlite_master where type='table' and name=?", (TABLE,)).fetchone())
+            finally:
+                con.close()
+        info["has_dose_event_table"] = retry_read(probe)
+        info["opens_read_only"] = True
     except (MedlogError, sqlite3.Error) as exc:
         info["opens_read_only"] = False
         report["errors"].append(f"{db} unreadable ({exc.__class__.__name__})")

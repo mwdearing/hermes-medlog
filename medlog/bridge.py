@@ -27,6 +27,7 @@ from types import SimpleNamespace
 
 from . import config
 from .core import MedlogError, data_dir, locked, now, tz
+from .sqlite_retry import is_transient, retry_read
 
 TABLE = "medication_dose_events"
 REQUIRED = ("client_record_id", "medication_name", "status", "start_time", "updated_at")
@@ -57,6 +58,8 @@ def open_readonly(db: str) -> sqlite3.Connection:
     try:
         return sqlite3.connect(uri, uri=True, timeout=10)
     except sqlite3.OperationalError as exc:
+        if is_transient(exc):
+            raise
         raise MedlogError(f"cannot open the receiver database read-only: {exc}") from exc
 
 
@@ -67,17 +70,18 @@ def _local(iso_text):
     return when.astimezone(tz())
 
 
-def fetch_records(db: str, cursor: str | None = None, since: str | None = None):
-    """Return (records, newest_updated_at). ``cursor`` filters on updated_at, ``since`` (a local date in the configured zone) on the event start."""
+def _read_rows(db: str, cursor: str | None):
     con = open_readonly(db)
     try:
         cur = con.cursor()
         try:
             columns = {row[1] for row in cur.execute(f"PRAGMA table_info({TABLE})")}
         except sqlite3.DatabaseError as exc:
+            if is_transient(exc):
+                raise
             raise MedlogError(f"cannot read the receiver database: {exc}") from exc
         if not columns:
-            return [], None  # an older receiver without the table: nothing to import, cursor untouched
+            return None, None  # an older receiver without the table: nothing to import, cursor untouched
         missing = [c for c in REQUIRED if c not in columns]
         if missing:
             raise MedlogError(f"receiver table {TABLE} lacks required column(s): {', '.join(missing)}")
@@ -87,10 +91,21 @@ def fetch_records(db: str, cursor: str | None = None, since: str | None = None):
             where.append("updated_at > ?")
             params.append(cursor)
         sql = f"SELECT {select} FROM {TABLE}" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY start_time ASC"
-        rows = cur.execute(sql, params).fetchall()
-        names = REQUIRED + OPTIONAL
+        return cur.execute(sql, params).fetchall(), REQUIRED + OPTIONAL
     finally:
         con.close()
+
+
+def fetch_records(db: str, cursor: str | None = None, since: str | None = None):
+    """Return (records, newest_updated_at). ``cursor`` filters on updated_at, ``since`` (a local date in the configured zone) on the event start.
+
+    The whole read (open, first query, fetch) is retried while the receiver is writing (see sqlite_retry)."""
+    try:
+        rows, names = retry_read(lambda: _read_rows(db, cursor))
+    except sqlite3.OperationalError as exc:
+        raise MedlogError(f"ERROR: {db} unreadable ({exc})") from exc
+    if rows is None:
+        return [], None
     records, newest = [], None
     for row in rows:
         item = dict(zip(names, row))
