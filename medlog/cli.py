@@ -28,6 +28,7 @@ zone), MEDLOG_STORE (store override, tests), MEDLOG_NOW (ISO, for tests). Every 
 from __future__ import annotations
 
 import argparse
+import math
 import csv
 import io
 import json
@@ -79,13 +80,21 @@ def _version() -> str:
     return __version__
 
 
+def finite_float(text: str) -> float:
+    """argparse type: like float, but NaN and infinity are refused (#1)."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise argparse.ArgumentTypeError(f"{text!r} is not a finite dose")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="medlog", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--json", action="store_true", help="JSON output")
     p.add_argument("--version", action="version", version=f"medlog {_version()}")
     sub = p.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("add-med")
-    a.add_argument("id"); a.add_argument("--name", required=True); a.add_argument("--dose", type=float)
+    a.add_argument("id"); a.add_argument("--name", required=True); a.add_argument("--dose", type=finite_float)
     a.add_argument("--unit"); a.add_argument("--kind", choices=["daily", "weekly", "prn"], default="daily")
     a.add_argument("--time", action="append"); a.add_argument("--weekday"); a.add_argument("--start")
     a.add_argument("--replace", action="store_true")
@@ -97,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     lg = sub.add_parser("log")
     lg.add_argument("med"); lg.add_argument("--status", choices=STATUSES, default="taken")
     lg.add_argument("--time"); lg.add_argument("--at"); lg.add_argument("--date"); lg.add_argument("--slot")
-    lg.add_argument("--dose", type=float); lg.add_argument("--unit"); lg.add_argument("--note")
+    lg.add_argument("--dose", type=finite_float); lg.add_argument("--unit"); lg.add_argument("--note")
     lg.add_argument("--source", default="cli"); lg.add_argument("--force", action="store_true")
     lg.add_argument("--dry-run", action="store_true")
     imp = sub.add_parser("import-apple", help="import an Apple Health medication export")

@@ -1,4 +1,6 @@
 """Tests for `medlog import-apple`. FAKE data only, in temp directories."""
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -475,6 +477,50 @@ class TestAfterMidnightDose(ImportAppleBase):
         self.assertEqual((e["date"], e["slot"]), ("2030-01-11", "morning"))
 
 
+class TestMalformedRows(ImportAppleBase):
+    """A row that cannot be identified is a schema problem, not a no-op (#8)."""
+
+    def row(self, **over):
+        item = {"external_id": "a1", "medication": "Fake Apple", "status": "taken",
+                "start": "2030-01-10T09:05:00+13:00", "dose": 50, "unit": "mg"}
+        item.update(over)
+        return item
+
+    def test_a_document_of_rows_without_external_id_exits_2(self):
+        self.map({"Fake Apple": "fk_apple"})
+        self.add_daily()
+        f = Path(self.tmp.name) / "noid.json"
+        f.write_text(json.dumps([self.row(external_id=None), {"medication": "Fake Apple"}]))
+        err = io.StringIO()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = medlog.main(["import-apple", str(f), "--apply"])
+        out = out.getvalue()
+        self.assertEqual(code, 2)
+        self.assertIn("malformed=2", out)
+        self.assertIn("imported=0", out)
+        self.assertIn("no usable external_id", err.getvalue())
+        # nothing was written: the store stays empty
+        self.assertEqual(medlog.store_for("fk_apple").events(), [])
+
+    def test_a_non_string_external_id_is_counted_not_dropped(self):
+        self.map({"Fake Apple": "fk_apple"})
+        self.add_daily()
+        f = Path(self.tmp.name) / "mixed.json"
+        f.write_text(json.dumps([self.row(), self.row(external_id=7)]))
+        out, code = self._run(["import-apple", str(f), "--apply"])
+        self.assertEqual(code, 0)
+        self.assertIn("imported=1", out)
+        self.assertIn("malformed=1", out)
+
+    def test_an_empty_document_is_unchanged(self):
+        f = Path(self.tmp.name) / "empty.json"
+        f.write_text("[]")
+        out, code = self._run(["import-apple", str(f)])
+        self.assertEqual(code, 0)
+        self.assertIn("malformed=0", out)
+
+
 class TestAutoImport(ImportAppleBase):
     """`--auto`: apply by itself only when the import is clean and small; otherwise stay a dry run and say why."""
 
@@ -580,3 +626,72 @@ class TestIncomparableUnits(ImportAppleBase):
         self.assertIn("corrected=1", out)
         (e,) = self.active()
         self.assertEqual((e["time"], e["dose"], e["unit"]), ("12:33", 200.0, "mg"))
+
+
+class TestNonFiniteDose(ImportAppleBase):
+    """A NaN dose can never mean a real amount (#1): refused at every boundary."""
+
+    def test_a_bare_nan_token_in_the_export_is_refused(self):
+        self.map({"Fake Apple": "fk_apple"})
+        self.add_daily()
+        f = Path(self.tmp.name) / "nan.json"
+        # A producer that emitted the bare NaN token: not valid strict JSON.
+        f.write_text('[{"external_id": "a1", "medication": "Fake Apple", "status": "taken",'
+                     ' "start": "2030-01-10T09:05:00+13:00", "dose": NaN}]')
+        err = io.StringIO()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = medlog.main(["import-apple", str(f), "--apply"])
+        self.assertEqual(code, 2)
+        self.assertIn("non-finite", err.getvalue())
+        self.assertEqual(medlog.store_for("fk_apple").events(), [])
+
+    def test_an_overflowing_dose_number_is_refused_before_anything_is_written(self):
+        """1e400 parses to inf without passing parse_constant; it must not half-apply an import (#1)."""
+        self.map({"Fake Apple": "fk_apple"})
+        self.add_daily()
+        f = Path(self.tmp.name) / "overflow.json"
+        f.write_text('[{"external_id": "a1", "medication": "Fake Apple", "status": "taken",'
+                     ' "start": "2030-01-10T09:05:00+13:00", "dose": 50},'
+                     ' {"external_id": "a2", "medication": "Fake Apple", "status": "taken",'
+                     ' "start": "2030-01-11T09:05:00+13:00", "dose": 1e400}]')
+        err = io.StringIO()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = medlog.main(["import-apple", str(f), "--apply"])
+        self.assertEqual(code, 2)
+        self.assertIn("non-finite", err.getvalue())
+        self.assertEqual(medlog.store_for("fk_apple").events(), [])
+
+    def test_dose_nan_on_the_cli_is_refused(self):
+        self.add_daily()
+        with self.assertRaises(SystemExit) as ctx:
+            medlog.main(["log", "fk_apple", "--dose", "nan",
+                         "--date", "2030-01-10", "--time", "09:00"])
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_a_recorded_nan_reads_as_a_mismatch_not_as_no_difference(self):
+        self.map({"Fake Apple": "fk_apple"})
+        self.add_daily()
+        # A record written before the boundary existed: its dose is the bare
+        # NaN token in events.jsonl. A clean import of the same external_id
+        # must report the difference, not read NaN as "no difference".
+        events = Path(medlog.data_dir()) / "events.jsonl"
+        good = ('{"date": "2030-01-10", "dose": 2.0, "id": "old1", "logged_at": "2030-01-09T12:00:00+13:00",'
+                ' "med": "fk_apple", "note": "apple:a1", "slot": "morning", "status": "taken",'
+                ' "time": "09:05", "time_source": "user", "unit": "mg", "apple_id": "a1"}\n')
+        events.write_text(good.replace('"dose": 2.0', '"dose": NaN'))
+        f = Path(self.tmp.name) / "same.json"
+        f.write_text(json.dumps([{"external_id": "a1", "medication": "Fake Apple",
+                                  "status": "taken", "start": "2030-01-10T09:05:00+13:00",
+                                  "dose": 50, "unit": "mg"}]))
+        out, _ = self._run(["import-apple", str(f)])
+        self.assertIn("duplicates=1", out)
+        self.assertIn("mismatches=1", out)
+
+    def test_append_refuses_a_non_finite_dose(self):
+        self.add_daily()
+        with self.assertRaises(medlog.MedlogError):
+            medlog.store_for("fk_apple").append(
+                {"med": "fk_apple", "dose": float("inf"), "date": "2030-01-10",
+                 "slot": "morning", "status": "taken", "id": "x1", "logged_at": "2030-01-09"})

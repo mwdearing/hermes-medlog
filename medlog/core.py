@@ -9,6 +9,7 @@ from __future__ import annotations
 import fcntl
 import importlib
 import json
+import math
 import os
 import shutil
 import sys
@@ -149,6 +150,12 @@ class JsonlStore:
         return events
 
     def append(self, event: dict) -> None:
+        dose = event.get("dose")
+        if isinstance(dose, float) and not math.isfinite(dose):
+            # A non-finite dose would poison the log's own JSON (json.dumps
+            # writes the bare NaN token) and every comparison against it
+            # (#1), so it is refused at the write boundary.
+            raise MedlogError(f"refusing to append a non-finite dose for {event.get('med')}")
         with locked(self.path):
             with open(self.path, "a", encoding="utf-8") as handle:
                 handle.write(json.dumps(event, sort_keys=True) + "\n")
